@@ -4,13 +4,17 @@
 /exp_log.json
 /exp_log.txt
 /mesos_digits.npz
+/loot-ledger.json
+/loot-evidence/
 *.tmp
 
 # Build output (made by build.py), including the copy to use in the project folder
 /build/
 /release/
 /Maple Classic Exp Overlay.exe
+/Maple Loot Overlay.exe
 /_internal/
+/tesseract/
 
 # Python
 __pycache__/

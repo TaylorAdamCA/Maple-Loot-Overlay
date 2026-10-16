@@ -10,8 +10,8 @@ and your party size from the party list, and keeps a log of EXP/hr and mesos/hr 
 map, level and party size.
 
 It only looks at the screen: it never reads or changes the game's files or memory and
-never sends input to the game. Your settings and log are kept in the MapleEXP folder
-inside %APPDATA% (named after its old name, Maple EXP/hr, so updating keeps them).
+never sends input to the game. Your settings and log are kept in the MapleLootOverlay
+folder inside %APPDATA%, separate from the upstream overlay.
 """
 import ctypes
 import hashlib
@@ -56,16 +56,17 @@ except Exception:
     except Exception:
         pass
 
-VERSION = "0.9.6-beta"
-WINDOW_TITLE = "Maple Classic Exp Overlay"    # the version is shown in Settings
-OLD_TITLES = ("Maple EXP/hr",)               # what versions before 0.9.3 were called
+VERSION = "0.10.0-beta"
+WINDOW_TITLE = "Maple Loot Overlay"
+OLD_TITLES = ()
 
 # Files that come with the program (inside the .exe when packaged), the folder it runs from,
-# and the folder for your settings, log and learned digits (MAPLE_EXP_DATA can override it).
+# and the folder for your settings, log and learned digits (MAPLE_LOOT_DATA can override it).
 APP_DIR = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
 ASSETS = APP_DIR / "assets"
 HOME_DIR = Path(sys.executable).parent if getattr(sys, "frozen", False) else Path(__file__).resolve().parent
-DATA_DIR = Path(os.environ.get("MAPLE_EXP_DATA") or Path(os.environ.get("APPDATA") or Path.home()) / "MapleEXP")
+DATA_DIR = Path(os.environ.get("MAPLE_LOOT_DATA")
+                or Path(os.environ.get("APPDATA") or Path.home()) / "MapleLootOverlay")
 
 CONFIG_PATH = DATA_DIR / "config.json"
 ERROR_LOG_PATH = DATA_DIR / "errors.log"
@@ -82,11 +83,12 @@ MESOS_START_PATH = ASSETS / "mesos_digits.npz"          # ...starting from these
 MESOS_BOX_PATH = ASSETS / "mesos_box.npz"
 SCAN_SECONDS = 4            # how often the whole window is checked for the inventory and party
 DEFAULTS = {"gap_seconds": 15, "transparency": 0, "topmost": True,
-            "check_updates": True, "skip_version": "", "ui_scale": 100, "compact": False, "hotkeys_on": True}
+            "check_updates": False, "skip_version": "", "ui_scale": 100, "compact": False,
+            "hotkeys_on": False, "share_runs": False}
 # Settings > Size, in %: only these, so the window can't get too small to read or use.
 UI_SCALES = (80, 90, 100, 110, 125, 150, 175, 200)
 STATS_SITE = "https://maple-classic-exp-overlay.pages.dev"       # shared 15-minute runs (server/)
-GITHUB_REPO = "beanguri/Maple-Classic-Exp-Overlay"
+GITHUB_REPO = "TaylorAdamCA/Maple-Loot-Overlay"
 RELEASES_PAGE = f"https://github.com/{GITHUB_REPO}/releases/latest"
 LATEST_RELEASE_API = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
 
@@ -182,15 +184,7 @@ def save_config(cfg):
 
 
 def move_old_data():
-    """Earlier versions kept settings and the log next to the program: copy them over once."""
-    for name in ("config.json", "exp_log.json", "exp_log.txt", "mesos_digits.npz"):
-        old, new = HOME_DIR / name, DATA_DIR / name
-        if old.exists() and not new.exists():
-            try:
-                DATA_DIR.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(old, new)
-            except Exception as e:
-                log_error(f"copying {name} from the program's folder", e)
+    """The fork starts with its own data; upstream files are never migrated."""
 
 
 def find_tesseract():
@@ -209,8 +203,8 @@ def find_tesseract():
 
 # --------------------------------------------------------------------------- updates
 #
-# At start (unless turned off in Settings) it asks GitHub for the latest release. The only
-# other time it goes online is to share finished 15-minute runs, if the player agreed to that.
+# Update checks are off by default in this fork. The player can enable them in Settings.
+# Automatic run sharing is disabled.
 
 def version_key(version):
     """'v0.9.1-beta' -> something to compare versions by. A full release beats its betas."""
@@ -2553,6 +2547,7 @@ class RegionSelector:
 
     def __init__(self, root, on_done):
         self.on_done = on_done
+        self.finished = False
         with mss.mss() as sct:
             v = sct.monitors[0]
         self.origin = (v["left"], v["top"])
@@ -2571,6 +2566,7 @@ class RegionSelector:
         self.canvas.bind("<B1-Motion>", self._drag)
         self.canvas.bind("<ButtonRelease-1>", self._release)
         self.win.bind("<Escape>", lambda e: self._finish(None))
+        self.win.protocol("WM_DELETE_WINDOW", lambda: self._finish(None))
         self.win.focus_force()
 
     def _press(self, e):
@@ -2593,6 +2589,9 @@ class RegionSelector:
                       "width": x1 - x0, "height": y1 - y0})
 
     def _finish(self, region):
+        if self.finished:
+            return
+        self.finished = True
         self.win.destroy()
         self.on_done(region)
 
@@ -2612,8 +2611,9 @@ LOG_HINT = "Right-click a line to copy, rename or delete it."
 
 
 class App:
-    def __init__(self, root, templates):
+    def __init__(self, root, templates, capture_enabled=True):
         self.root = root
+        self.capture_enabled = capture_enabled
         self.cfg = {**DEFAULTS, **load_config()}
         mode = self.cfg.get("mode", "window")
         self.reader = ScreenReader(templates, mode, self.cfg.get("region"))
@@ -2643,6 +2643,7 @@ class App:
         self.q = queue.Queue()
         self.stop_evt = threading.Event()
         self.last_capture = None
+        self.profit_window = None
 
         self.fonts = {name: tkfont.Font(root, family=family, weight=weight, underline=underline)
                       for name, (family, _, weight, underline) in FONTS.items()}
@@ -2681,6 +2682,8 @@ class App:
                   **{**small, "fg": ACCENT_SOFT, "activebackground": BG, "activeforeground": ACCENT,
                      "font": self.fonts["link"]})
         self.best_btn.pack(side="left", padx=(0, 4))
+        tk.Button(corner, text="Loot + profit", command=self.open_profit,
+                  **{**small, "font": self.fonts["link"]}).pack(side="left", padx=(0, 4))
         tk.Button(corner, text="⚙", command=self.open_settings, **small).pack(side="left")
         self.log_btn = tk.Button(corner, text=">", command=self.toggle_log, **small)
         self.log_btn.pack(side="left")
@@ -2753,12 +2756,31 @@ class App:
             self.status.set("Looking for the MapleStory window..." if mode == "window"
                             else "Using your selected area.")
 
-        threading.Thread(target=self._worker, daemon=True).start()
+        if capture_enabled:
+            threading.Thread(target=self._worker, daemon=True).start()
+        else:
+            self.start_btn.config(state="disabled")
+            for button in self.more_buttons:
+                button.config(state="disabled")
+            self.status.set("Accounting only. Screen capture is off.")
         root.after(200, self._pump)
         root.after(500, self._refresh)
         if self.cfg["check_updates"]:
             self.check_updates()                       # only now, when it starts
-        root.after(1500, self._ask_to_share)           # (asked once, the first time)
+
+    def open_profit(self):
+        try:
+            from loot_ui import ProfitWindow
+            if self.profit_window and self.profit_window.window.winfo_exists():
+                self.profit_window.window.deiconify()
+                self.profit_window.window.lift()
+                return
+            self.profit_window = ProfitWindow(self.root, DATA_DIR / "loot-ledger.json",
+                                             wallet=lambda: self.meso.value,
+                                             select_region=RegionSelector)
+        except Exception as error:
+            log_error("opening the loot ledger", error)
+            messagebox.showerror("Loot ledger could not be opened", str(error), parent=self.root)
 
     # ---- log panel
     def _build_log_panel(self):
@@ -3061,7 +3083,7 @@ class App:
         sharing = tk.BooleanVar(value=bool(self.cfg.get("share_runs")))
         share_line = tk.Frame(w, bg=BG)
         share_line.grid(row=7, column=0, sticky="w", padx=10, pady=(2, 0))
-        tk.Checkbutton(share_line, text=f"Share my {RUN_SECONDS // 60}-minute runs (anonymously) on the best-maps site",
+        tk.Checkbutton(share_line, text="Run sharing is disabled in this fork", state="disabled",
                        variable=sharing, bg=BG, fg=FG, selectcolor=FIELD, activebackground=BG,
                        activeforeground=FG, font=self.fonts["text"]).pack(side="left")
         tk.Button(share_line, text="Open it", command=self.open_best_maps, bg=BG,
@@ -3232,36 +3254,11 @@ class App:
         webbrowser.open(STATS_SITE + ("/?" + urllib.parse.urlencode(ask) if ask else ""))
 
     def _ask_to_share(self):
-        if "share_runs" in self.cfg:
-            return
-        yes = messagebox.askyesno(
-            "Help other players pick maps?",
-            "Share your farming, so everyone can see which maps give the most EXP for their "
-            "class and level?\n\n"
-            f"Every {RUN_SECONDS // 60} minutes of non-stop farming is shared: the map, your level, "
-            "class and party size, and the EXP and mesos you got. Never your character's name.\n\n"
-            f"They're combined with other players' on {STATS_SITE.split('//')[1]}. You can change "
-            "this any time in Settings.", parent=self.root)
-        self.cfg["share_runs"] = bool(yes)
-        save_config(self.cfg)
-        self.share_runs()
+        """Modified fork metrics are kept locally."""
 
     def share_runs(self):
-        """Sends finished runs to the stats site in the background (if agreed to)."""
+        """Do not send this fork's metrics to the upstream community service."""
         self._next_share = time.monotonic() + 1800
-        if not self.cfg.get("share_runs") or self._sharing:
-            return
-        runs = self.autolog.unshared_runs()
-        if not runs:
-            return
-        self._sharing, install = True, self.autolog.install
-
-        def work():
-            try:
-                self.q.put(("shared", post_runs(install, runs)))
-            except Exception:
-                self.q.put(("shared", None))           # offline or the site is down: later
-        threading.Thread(target=work, daemon=True).start()
 
     # ---- updates
     def check_updates(self, manual=False):
@@ -3508,6 +3505,8 @@ class App:
 
     # ---- buttons
     def _hotkey(self, action):
+        if not self.capture_enabled and action in ("start", "reset", "skip"):
+            return
         if action == "start":
             self.toggle()
             done = "started" if self.session.on else "paused"
@@ -3524,6 +3523,9 @@ class App:
         self.status.set(self.hotkey_note[0])
 
     def toggle(self):
+        if not self.capture_enabled:
+            self.status.set("Accounting only. Screen capture is off.")
+            return
         if self.session.on:                     # (also while it's paused by itself)
             self.session.pause()
             self.start_btn.config(text="Resume")
@@ -3766,9 +3768,8 @@ class App:
 def main():
     global tesseract_ok, _single_instance
     # Only one copy at a time (per data folder): two copies would each keep their own log.
-    # If it's already running, bring that window to the front instead. (The lock keeps the old
-    # name, so an older version and this one can't run at the same time either.)
-    lock ="Local\\MapleEXP-" + hashlib.md5(str(DATA_DIR).lower().encode()).hexdigest()[:12]
+    # If this fork is already running, bring its window to the front instead.
+    lock = "Local\\MapleLootOverlay-" + hashlib.md5(str(DATA_DIR).lower().encode()).hexdigest()[:12]
     _single_instance = _CreateMutex(None, False, lock)
     if ctypes.get_last_error() == 183:                      # ERROR_ALREADY_EXISTS
         found = []
@@ -3792,7 +3793,9 @@ def main():
         pytesseract.pytesseract.tesseract_cmd = tess
         tesseract_ok = True
     root = tk.Tk()
-    App(root, DigitTemplates.load())
+    app = App(root, DigitTemplates.load(), capture_enabled="--accounting-only" not in sys.argv)
+    if "--accounting-only" in sys.argv:
+        root.after(100, app.open_profit)
     root.mainloop()
 
 

@@ -1,16 +1,16 @@
-"""Builds the Windows download: release/Maple-Classic-Exp-Overlay-v<version>.zip
+"""Builds the Windows download: release/Maple-Loot-Overlay-v<version>.zip
 
 It packs the program, Python and everything it needs into one folder with
-"Maple Classic Exp Overlay.exe",
+"Maple Loot Overlay.exe",
 adds Tesseract OCR (for reading map names), and zips it up for a GitHub release.
 
 Needs Python with the packages from requirements.txt plus PyInstaller, and Tesseract
 installed (https://github.com/UB-Mannheim/tesseract/wiki):
     py -3 -m pip install -r requirements.txt pyinstaller
     py -3 build.py
-Set TESSERACT_DIR if Tesseract isn't in C:\\Program Files\\Tesseract-OCR.
+Set TESSERACT_DIR if Tesseract isn't in the local tesseract folder.
 
-It also puts a copy to use right away in the project folder: "Maple Classic Exp Overlay.exe"
+It also puts a copy to use right away in the project folder: "Maple Loot Overlay.exe"
 and the _internal folder it needs (Tesseract goes inside it). Only changed files are copied.
 
     py -3 build.py zip <folder>
@@ -30,10 +30,10 @@ import zipfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
-NAME = "Maple Classic Exp Overlay"                 # the folder and the .exe
+NAME = "Maple Loot Overlay"                        # the folder and the .exe
 ZIP_NAME = NAME.replace(" ", "-")                  # GitHub turns spaces in downloads into dots
 VERSION = re.search(r'^VERSION = "([^"]+)"', (ROOT / "maple_exp.py").read_text(encoding="utf-8"), re.M)[1]
-TESSERACT = Path(os.environ.get("TESSERACT_DIR", r"C:\Program Files\Tesseract-OCR"))
+TESSERACT = Path(os.environ.get("TESSERACT_DIR", str(ROOT / "tesseract")))
 BUILD, RELEASE = ROOT / "build", ROOT / "release"
 
 # Parts of the libraries that are never used, left out to make the download smaller:
@@ -44,12 +44,26 @@ UNUSED = ["_internal/cv2/opencv_videoio_ffmpeg*.dll", "_internal/PIL/_avif*.pyd"
 READ_ME_FIRST = f"""{NAME} v{VERSION}  (beta)
 
 1. Double-click "{NAME}.exe" to start it.
-   If Windows says "Windows protected your PC", click "More info", then "Run anyway".
-2. Start MapleStory and press Start in the overlay.
+2. Start MapleStory and press Start for the existing EXP and wallet reader.
+3. Open Loot + profit for confirmed drops, supplies and inventory checkpoints.
+   Configure prices and record opening counts before the outing. Blank means unknown.
+
+For the ledger without continuous capture, double-click "Start accounting.cmd".
+This launches "{NAME}.exe" with --accounting-only. Close the current
+instance before switching modes; opening a second launcher only focuses it.
 
 Keep this whole folder together: the .exe needs the files next to it.
-The full guide is on the GitHub page you downloaded this from.
+Loot accounting is assisted and requires your confirmation. It does not collect,
+sell or recharge items. No automatic run uploads occur in this fork.
+Paste only pickup lines not already confirmed. Overlapping text or another
+capture can count the same pickup again. Live item OCR has not been calibrated.
+The guide is at https://github.com/TaylorAdamCA/Maple-Loot-Overlay
 """
+
+ACCOUNTING_LAUNCHER = f'''@echo off
+cd /d "%~dp0"
+start "" "%~dp0{NAME}.exe" --accounting-only
+'''
 
 
 def main():
@@ -73,7 +87,7 @@ def main():
     for folder in ("configs", "tessconfigs"):
         if (TESSERACT / "tessdata" / folder).is_dir():
             shutil.copytree(TESSERACT / "tessdata" / folder, tess / "tessdata" / folder)
-    for notice in ("LICENSE", "LICENSE.txt", "doc/LICENSE", "doc/AUTHORS"):
+    for notice in ("LICENSE", "LICENSE.txt", "doc/LICENSE", "doc/AUTHORS", "doc/tessdata-fast-LICENSE"):
         if (TESSERACT / notice).is_file():
             shutil.copy2(TESSERACT / notice, tess / f"{Path(notice).name}.txt")
 
@@ -83,12 +97,13 @@ def main():
             f.unlink()
 
     (app / "READ ME FIRST.txt").write_text(READ_ME_FIRST, encoding="utf-8")
+    (app / "Start accounting.cmd").write_text(ACCOUNTING_LAUNCHER, encoding="utf-8")
     make_zip(app)
     copy_to_root(app)
 
 
 def make_zip(app):
-    """release/<name>-v<version>.zip, with everything in a "Maple Classic Exp Overlay" folder."""
+    """release/<name>-v<version>.zip, with everything in a "Maple Loot Overlay" folder."""
     RELEASE.mkdir(exist_ok=True)
     zip_path = RELEASE / f"{ZIP_NAME}-v{VERSION}.zip"
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as z:

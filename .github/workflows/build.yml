@@ -1,36 +1,29 @@
-# Builds the Windows download on GitHub from this code, so the .exe can be code-signed:
-# SignPath Foundation only signs builds made here. Run it from the Actions tab (Build, then
-# "Run workflow"), or push a version tag. It publishes nothing: the zip is left on the run's
-# page as "download".
-#
-# Signing switches on once SignPath has accepted the project: add the secret
-# SIGNPATH_API_TOKEN and the variable SIGNPATH_ORGANIZATION_ID (Settings > Secrets and
-# variables > Actions). Until then that step is skipped and the build is unsigned.
+# Builds an unsigned fork artifact on manual request. Does not publish a release.
 name: Build
 
 on:
   workflow_dispatch:
-  push:
-    tags: ["v*"]
 
 jobs:
   build:
     runs-on: windows-latest
     env:
-      SIGNPATH_API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
+      TESSERACT_DIR: 'C:\Program Files\Tesseract-OCR'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.10"
+          python-version: "3.13"
       - name: Install the packages (the versions the releases are built with)
-        run: pip install mss==10.1.0 numpy==2.2.6 opencv-python-headless==4.12.0.88 pillow==11.3.0 pytesseract==0.3.13 pyinstaller==6.17.0
+        run: pip install -r requirements-lock.txt pyinstaller==6.17.0
       - name: Install Tesseract OCR
         run: choco install tesseract --version 5.5.0.20241111 -y --no-progress
       - name: Tests
         run: |
           python tests/test_logic.py
           python tests/test_screen.py
+          python -B -m unittest discover -s tests -p "test_loot*.py"
+          python -B tests/test_fork_settings.py
       - name: Build
         run: python build.py
       - name: Keep the unsigned build
@@ -38,21 +31,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: unsigned
-          path: build/dist/Maple Classic Exp Overlay
-      - name: Sign the .exe (SignPath)
-        if: env.SIGNPATH_API_TOKEN != ''
-        uses: signpath/github-action-submit-signing-request@v2
-        with:
-          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
-          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
-          project-slug: maple-classic-exp-overlay
-          signing-policy-slug: release-signing
-          github-artifact-id: ${{ steps.unsigned.outputs.artifact-id }}
-          wait-for-completion: true
-          output-artifact-directory: signed
-      - name: Zip the signed build
-        if: env.SIGNPATH_API_TOKEN != ''
-        run: python build.py zip signed
+          path: build/dist/Maple Loot Overlay
       - name: Keep the download
         uses: actions/upload-artifact@v4
         with:

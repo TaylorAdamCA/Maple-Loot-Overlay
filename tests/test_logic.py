@@ -9,7 +9,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-os.environ["MAPLE_EXP_DATA"] = tempfile.mkdtemp()           # never touch your real data
+os.environ["MAPLE_LOOT_DATA"] = tempfile.mkdtemp()          # never touch your real data
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import maple_exp as m  # noqa: E402
 
