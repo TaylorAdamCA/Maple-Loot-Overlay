@@ -1940,9 +1940,10 @@ class MesoTracker:
     """Turns mesos readings into mesos gained per hour and per 5 minutes.
 
     A new count only counts once two readings in a row agree on it (three for a big jump),
-    so a one-off misread never shows up as mesos gained. A change in the
-    number of digits, or by more than half, starts counting afresh from the new number
-    instead: that's a shop visit or a corrected misread, not mesos picked up.
+    so a one-off misread never shows up as mesos gained. A change by more than half,
+    or a digit-count change bigger than 10%, starts counting afresh from the new number
+    instead: that's a shop visit or a corrected misread, not mesos picked up. Small digit
+    rollovers count after three identical readings.
     """
 
     def __init__(self):
@@ -1974,14 +1975,15 @@ class MesoTracker:
             # Measured against the bigger of the two, so a misread and its correction are
             # always judged the same way (both counted, or both not), and cancel out.
             top = max(value, old) if old is not None else 0
-            jump = old is not None and (len(str(value)) != len(str(old)) or abs(value - old) > 0.5 * top)
+            digits_changed = old is not None and len(str(value)) != len(str(old))
+            jump = old is not None and abs(value - old) > (0.1 if digits_changed else 0.5) * top
             big = old is not None and abs(value - old) > max(10000, 0.05 * top)
-            # The first count, and a jump to a new count, need the very same number 3 times:
-            # neither is counted as mesos gained, so a misread there would never cancel out
-            # (and different misreads can be close to each other, e.g. with an extra digit).
+            # The first count, a digit change and a jump need the very same number 3 times.
+            # First counts and jumps aren't gained, so a misread there would never cancel
+            # out; digit changes can also be different, nearby misreads of an extra digit.
             # About 10x (or a tenth): almost always a digit read too many (or lost).
             tenfold = old is not None and old > 0 and (9 <= value / old <= 11 or 0.09 <= value / old <= 0.11)
-            if old is None or jump:
+            if old is None or jump or digits_changed:
                 if same < (8 if tenfold else 3):
                     return
             elif n < (3 if big else 2):

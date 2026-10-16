@@ -249,6 +249,66 @@ for v in (20000, 20000, 20000, 15001, 15001, 20000, 20000, 20040, 20040):
     t.observe(v, 0, 0, True)
 check(f"a misread twice in a row and its correction cancel out (gained {t.gained})", t.gained == 40)
 
+for before, after, gained in ((9, 10, 1), (99, 100, 1), (9999, 10000, 1),
+                              (9980, 10020, 40), (999999, 1000000, 1)):
+    t = m.MesoTracker()
+    for v in (before,) * 3 + (after,) * 2:
+        t.observe(v, 0, 0, True)
+    check(f"a digit rollover still needs 3 exact readings ({before} to {after})",
+          t.value == before and t.gained == 0)
+    t.observe(after, 60, 60, True)
+    check(f"a small digit rollover counts the gain ({before} to {after}: {t.gained})",
+          t.value == after and t.gained == gained and t.per_hour(60) == gained * 60
+          and t.per_5min(60) == gained * 5)
+    for v in (before,) * 3:
+        t.observe(v, 60, 60, True)
+    check(f"a digit rollover and its correction cancel out ({after} to {before})",
+          t.value == before and t.gained == 0)
+
+for before, after, nearby, gained in ((9980, 10020, 10010, 40), (10020, 9980, 9990, -40)):
+    t = m.MesoTracker()
+    for v in (before,) * 3 + (nearby, after, nearby, after, after):
+        t.observe(v, 0, 0, True)
+    check(f"fluctuating readings across a digit boundary aren't enough ({before} to {after})",
+          t.value == before and t.gained == 0)
+    t.observe(after, 0, 0, True)
+    check(f"a digit rollover counts once the readings agree exactly ({before} to {after})",
+          t.value == after and t.gained == gained)
+
+for before, after in ((0, 1), (0, 10), (9, 19), (99, 199), (9999, 19999),
+                      (19999, 9999), (8, 10), (89, 100), (8999, 10000)):
+    t = m.MesoTracker()
+    for v in (before,) * 3 + (after,) * 3:
+        t.observe(v, 0, 0, True)
+    check(f"zero, extra or lost digits, and wider jumps still rebase ({before} to {after})",
+          t.value == after and t.gained == 0)
+    for v in (before,) * 3:
+        t.observe(v, 0, 0, True)
+    check(f"correcting a rebased count doesn't add mesos ({after} to {before})",
+          t.value == before and t.gained == 0)
+
+for before, after in ((9, 90), (99, 990), (9999, 99990), (10, 1), (100, 10), (10000, 1000)):
+    t = m.MesoTracker()
+    for v in (before,) * 3 + (after,) * 7:
+        t.observe(v, 0, 0, True)
+    check(f"a tenfold change still waits for 8 exact readings ({before} to {after})",
+          t.value == before and t.gained == 0)
+    t.observe(after, 0, 0, True)
+    check(f"a confirmed tenfold change still rebases ({before} to {after})",
+          t.value == after and t.gained == 0)
+
+t = m.MesoTracker()
+for v in (9980,) * 3:
+    t.observe(v, 0, 0, True)
+t.pause()
+for v in (10020,) * 3:
+    t.observe(v, 30, 0, False)
+check("a digit rollover while paused isn't counted", t.value == 10020 and t.gained == 0)
+t.observe(10020, 60, 0, True)
+for v in (10030,) * 2:
+    t.observe(v, 90, 30, True)
+check("mesos picked up after resuming still count", t.value == 10030 and t.gained == 10)
+
 # ---- EXP outliers
 def exp_tracker(e=47850, p=50.0):
     tr = m.ExpTracker(); tr.start()
