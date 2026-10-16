@@ -250,6 +250,7 @@ for v in (20000, 20000, 20000, 15001, 15001, 20000, 20000, 20040, 20040):
 check(f"a misread twice in a row and its correction cancel out (gained {t.gained})", t.gained == 40)
 
 for before, after, gained in ((9, 10, 1), (99, 100, 1), (9999, 10000, 1),
+                              (9000, 10000, 1000), (10000, 9000, -1000),
                               (9980, 10020, 40), (999999, 1000000, 1)):
     t = m.MesoTracker()
     for v in (before,) * 3 + (after,) * 2:
@@ -258,7 +259,7 @@ for before, after, gained in ((9, 10, 1), (99, 100, 1), (9999, 10000, 1),
           t.value == before and t.gained == 0)
     t.observe(after, 60, 60, True)
     check(f"a small digit rollover counts the gain ({before} to {after}: {t.gained})",
-          t.value == after and t.gained == gained and t.per_hour(60) == gained * 60
+          t.value == after and t.gained == gained and abs(t.per_hour(60) - gained * 60) < 1e-6
           and t.per_5min(60) == gained * 5)
     for v in (before,) * 3:
         t.observe(v, 60, 60, True)
