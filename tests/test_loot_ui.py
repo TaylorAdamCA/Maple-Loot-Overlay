@@ -576,6 +576,54 @@ class WindowTests(WorkflowFixture, unittest.TestCase):
         self.assertEqual(self.window.window.state(), "normal")
         self.assertEqual(dialog.window.state(), "normal")
 
+    def test_meowdb_suggestion_requires_save_and_preserves_outing_price(self):
+        self.window.controller = self.controller
+        self.start()
+        self.window.refresh()
+        self.window.catalog_table.selection_set("red_shell")
+        self.root.update()
+        before = self.path.read_bytes()
+        self.assertTrue(hasattr(self.window, "suggestion_button"), "Catalog needs a price suggestion control")
+        self.window.suggestion_button.invoke()
+        self.assertEqual(self.window.catalog_price.get(), "4")
+        self.assertEqual(self.path.read_bytes(), before)
+        self.assertEqual(self.controller.ledger.catalog["red_shell"]["unit_value"], Decimal("2"))
+        status = self.window.status_var.get()
+        self.assertIn("NPC sell-back per item", status)
+        self.assertIn("2026-10-16", status)
+        self.assertIn("https://meowdb.com/msclassic/item-db/351", status)
+        self.window.save_catalog()
+        saved = LootLedger(self.path)
+        self.assertEqual(saved.catalog["red_shell"]["unit_value"], Decimal("4"))
+        self.assertEqual(saved.active_session["catalog"]["red_shell"]["unit_value"], Decimal("2"))
+
+    def test_subi_fractional_recharge_price_saves_and_reloads(self):
+        self.window.controller = self.controller
+        self.window.refresh()
+        self.window.catalog_table.selection_set("subi_stars")
+        self.root.update()
+        self.window.suggestion_button.invoke()
+        self.assertEqual(self.window.catalog_price.get(), "0.3")
+        self.assertIn("Recharge per individual star", self.window.status_var.get())
+        self.assertFalse(self.path.exists())
+        self.window.save_catalog()
+        saved = LootLedger(self.path)
+        self.assertEqual(saved.catalog["subi_stars"]["unit_value"], Decimal("0.3"))
+        self.assertEqual(saved.catalog["subi_stars"]["unit_value"] * 500, Decimal("150"))
+
+    def test_unverified_price_suggestion_keeps_entered_price(self):
+        self.assertTrue(hasattr(self.window, "suggestion_button"), "Catalog needs a price suggestion control")
+        for name, kind in (("Unknown item", "loot"), ("Red Snail Shell", "supply"),
+                           ("HP Potion", "supply"), ("MP Potion", "supply")):
+            with self.subTest(name=name, kind=kind):
+                self.window.catalog_name.set(name)
+                self.window.catalog_kind.set(kind)
+                self.window.catalog_price.set("37.5")
+                self.window.suggestion_button.invoke()
+                self.assertEqual(self.window.catalog_price.get(), "37.5")
+                self.assertIn("No verified", self.window.status_var.get())
+                self.assertFalse(self.path.exists())
+
 
 if __name__ == "__main__":
     unittest.main()

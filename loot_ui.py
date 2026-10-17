@@ -17,6 +17,7 @@ from tkinter.scrolledtext import ScrolledText
 import uuid
 
 from loot_ledger import LootLedger, MAX_INTEGER
+from loot_prices import price_suggestion
 from loot_reader import parse_item_text, read_item_image
 
 
@@ -768,6 +769,12 @@ class ProfitWindow:
             field.grid(row=1, column=column, padx=(0, 8), sticky="ew")
         ttk.Button(editor, text="Save item / price", command=self.save_catalog).grid(row=1, column=3, padx=5)
         ttk.Button(editor, text="New custom item", command=self.clear_catalog).grid(row=1, column=4)
+        suggestions = ttk.Frame(self.catalog_tab)
+        suggestions.pack(fill="x", pady=(0, 8))
+        self.suggestion_button = ttk.Button(suggestions, text="Use MeowDB suggestion", command=self.use_price_suggestion)
+        self.suggestion_button.pack(side="left")
+        ttk.Label(suggestions, text="Bundled MeowDB prices. Review the source and check date, then Save item / price.",
+                  wraplength=650).pack(side="left", padx=10)
         ttk.Label(self.catalog_tab, text="Loot uses observed NPC value; supplies use replacement cost. ? means unknown.\n"
                   "Star price is per individual star. Catalog edits apply to the next outing; existing prices remain frozen.", wraplength=950).pack(anchor="w")
         self.status_var = tk.StringVar(self.window)
@@ -878,6 +885,15 @@ class ProfitWindow:
         self.catalog_name.set("")
         self.catalog_kind.set("loot")
         self.catalog_price.set("?")
+
+    def use_price_suggestion(self):
+        suggestion = price_suggestion(self.catalog_name.get(), self.catalog_kind.get())
+        if suggestion is None:
+            self.status_var.set("No verified MeowDB suggestion for this exact item and kind. Price unchanged; enter an observed per-item value.")
+            return
+        self.catalog_price.set(suggestion.value)
+        self.status_var.set(f"MeowDB suggestion: {suggestion.basis}, checked {suggestion.checked_on}. "
+                            f"{suggestion.url} Review, then Save item / price to use it for future outings.")
 
     def save_catalog(self):
         try:

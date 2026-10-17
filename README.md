@@ -24,6 +24,8 @@ The fork stores its settings and ledger in `%APPDATA%\MapleLootOverlay`. It does
 
 ## Track drops and profit
 
+The Catalog has **Use MeowDB suggestion** for a small [sourced price set](docs/price-sources.md), including shells, spores, Subi recharge, pet food and named potions. Select an item, apply the suggestion, check its date and basis, then **Save item / price**. This fills the editor only. It does not overwrite saved prices or existing outings automatically. Generic HP/MP Potion entries need the actual potion name. Vendor prices can differ; observed costs take precedence.
+
 1. Open **Loot + profit**, then **Catalog for future outings**. Set observed NPC sale values for loot and replacement cost per unit for supplies. Add or rename specific potions/custom drops before starting. For stars, enter the price per individual star, not per stack. Prices remain fixed within each outing.
 2. Choose **New outing**. Record the wallet and total inventory counts at the same checkpoint. Count all stacks. Seven full stacks of 500 stars means 3,500 stars. Enter `0` only for a confirmed absence. `?` or blank means unknown.
 3. Use **Record activity** for confirmed pickups, sales, purchases, star recharges and external cash transfers. Shop amounts are actual transaction totals. These entries describe activity and do not send any inputs to MapleStory.

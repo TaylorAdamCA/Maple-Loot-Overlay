@@ -61,6 +61,14 @@ The 268 checks include 35 ledger, 26 reader and 38 controller/Tk tests. The full
 
 Host execution resolved the sandbox's temporary-directory and native-hotkey restrictions. No tests were removed to hide those environment failures. A desktop visual inspection could not finish because Computer Use app approval timed out. The automated Tk tests ran; the short-lived demo used synthetic data and no capture. A portable executable was not built or released; the prepared source launchers are the delivery for this PC.
 
+## MeowDB price suggestions update
+
+The [price suggestion review](reviews/price-suggestions.md) completed with `claude-fable-5-1` at high effort. It found no blocker. The review accepted the supplied website evidence rather than independently checking MeowDB. Public source links, unit meanings and vendor differences are recorded in [price sources](price-sources.md).
+
+After checking its comments against the implementation, the import moved to the module header, the UI wording now calls the prices bundled, and an extra UI test saves and reloads Subi's fractional recharge cost. That test verifies `0.3` per individual star and `150` for 500 stars. Existing default catalog spellings match the exact lookup. Generic potion names still require the actual item name.
+
+The update passed all 107 loot tests and all seven fork integration tests. The loot tests now include 35 ledger, 26 reader, 41 controller/Tk and five price tests. They verify that applying a suggestion changes only the editor, saving changes future outing prices, current outing prices stay frozen, and unknown names preserve custom prices. The earlier 143 logic and 19 screen checks concern unchanged code and were not repeated for this update. The completed suites contain 276 checks in total. No live game or packaged executable test is claimed.
+
 ## Local OCR runtime
 
 The prepared checkout contains Tesseract `5.5.3.20260724`, English data and required libraries in the ignored `tesseract` folder. The installer was extracted, never run, and no global installation was made.
